@@ -13,7 +13,7 @@ class MonteCarlo
         Console.WriteLine("Input the number of points:");
         int totalPoints = int.Parse(Console.ReadLine());
 
-        Random random = new Random();
+        Random random = new Random(12345);
         int pointsInside = 0;
 
         Stopwatch sw = Stopwatch.StartNew();
@@ -39,7 +39,7 @@ class MonteCarlo
         double error = Math.Abs((exactArea - approximateArea) / exactArea) * 100;
 
         Console.WriteLine($"Margin of error: {error} %");
-        Console.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms");
+        Console.WriteLine($"Elapsed time: {sw.Elapsed}");
     }
 
     static bool IsPointInside(double x, double y, double radius)
