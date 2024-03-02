@@ -32,7 +32,7 @@ class MonteCarlo
             index += 2;
         }
 
-        double approximateArea = (totalPoints - (double)pointsInside / totalPoints) * Math.Pow(squareSize,2); 
+        double approximateArea = (totalPoints - (double)pointsInside) / totalPoints * Math.Pow(squareSize,2); 
         sw.Stop();
 
         Console.WriteLine($"Approximate area: {approximateArea}");
