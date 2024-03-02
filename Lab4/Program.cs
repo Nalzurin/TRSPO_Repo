@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,57 +26,65 @@ class Program
             randomNumbers[i] = random.NextDouble() * radius * 2;
         }
 
-
-        Stopwatch sw = Stopwatch.StartNew();
-        Thread[] threads = new Thread[numThreads];
-        int index = 0;
-        for (int i = 0; i < numThreads; i++)
+        using (MemoryMappedFile mmf = MemoryMappedFile.CreateNew("MonteCarloMemoryMappedFile", PointsNum * sizeof(int)))
         {
-            int threadIndex = i;
-            threads[i] = new Thread(() =>
+            Stopwatch sw = Stopwatch.StartNew();
+            Thread[] threads = new Thread[numThreads];
+            int index = 0;
+
+            for (int i = 0; i < numThreads; i++)
             {
-                if (i == numThreads - 1)
+                int threadIndex = i;
+                threads[i] = new Thread(() =>
                 {
-                    results[threadIndex] = MonteCarloSimulation(randomNumbers, index, iterationsPerThread + remainder, radius);
-                }
-                else
-                {
-                    results[threadIndex] = MonteCarloSimulation(randomNumbers, index, iterationsPerThread, radius);
-                }
-            });
-            index += iterationsPerThread;
+                    using (MemoryMappedViewAccessor accessor = mmf.CreateViewAccessor())
+                    {
+                        if (i == numThreads - 1)
+                        {
+                            results[threadIndex] = MonteCarloSimulation(randomNumbers, index, iterationsPerThread + remainder, radius, accessor);
+                        }
+                        else
+                        {
+                            results[threadIndex] = MonteCarloSimulation(randomNumbers, index, iterationsPerThread, radius, accessor);
+                        }
+                    }
+                });
+                index += iterationsPerThread;
+            }
+
+            foreach (var thread in threads)
+            {
+                thread.Start();
+            }
+
+            foreach (var thread in threads)
+            {
+                thread.Join();
+            }
+
+            using (MemoryMappedViewAccessor accessor = mmf.CreateViewAccessor())
+            {
+                int totalInsideCircle = accessor.ReadInt32(0);
+                double estimatedArea = (PointsNum - totalInsideCircle) / PointsNum * Math.Pow(radius * 2, 2);
+                sw.Stop();
+
+                Console.WriteLine($"Estimated area of the circle: {estimatedArea}");
+                double exactArea = CalculateExactArea(radius);
+
+                Console.WriteLine($"Exact area: {exactArea}");
+                double error = Math.Abs((exactArea - estimatedArea) / exactArea) * 100;
+
+                Console.WriteLine($"Margin of error: {error} %");
+                Console.WriteLine($"Elapsed time: {sw.Elapsed}");
+
+            }
+            
+
+            
         }
-
-        foreach (var thread in threads)
-        {
-            thread.Start();
-        }
-
-        foreach (var thread in threads)
-        {
-            thread.Join();
-        }
-
-        double totalInsideCircle = 0;
-        foreach (int result in results)
-        {
-            totalInsideCircle += result;
-        }
-        sw.Stop();
-
-        double estimatedArea = (PointsNum - totalInsideCircle) / PointsNum * Math.Pow(radius * 2, 2);
-
-        Console.WriteLine($"Estimated area of the circle: {estimatedArea}");
-        double exactArea = CalculateExactArea(radius);
-
-        Console.WriteLine($"Exact area: {exactArea}");
-        double error = Math.Abs((exactArea - estimatedArea) / exactArea) * 100;
-
-        Console.WriteLine($"Margin of error: {error} %");
-        Console.WriteLine($"Elapsed time: {sw.Elapsed}");
     }
 
-    static int MonteCarloSimulation(double[] rand, int index, int iterations, double radius)
+    static int MonteCarloSimulation(double[] rand, int index, int iterations, double radius, MemoryMappedViewAccessor accessor)
     {
         int insideCircle = 0;
 
@@ -84,7 +93,7 @@ class Program
             double x = rand[index];
             double y = rand[index + 1];
 
-            // Check if the point (x, y) is inside the unit circle
+            
             if (x * x + y * y <= radius * radius)
             {
                 insideCircle++;
@@ -92,8 +101,11 @@ class Program
             index += 2;
         }
 
+        int currentCount = accessor.ReadInt32(0);
+        accessor.Write(0, currentCount + 1);
         return insideCircle;
     }
+
     static double CalculateExactArea(double radius)
     {
         return Math.PI * radius * radius;
